@@ -5,5 +5,5 @@ import com.databit.stockia.platform.notificationsmessaging.domain.model.valueobj
 import com.databit.stockia.platform.notificationsmessaging.domain.model.valueobjects.AlertType;
 
 public record CreateAlertCommand(Long restaurantId, AlertType type, AlertSeverity severity, String message, AlertChannel channel) {
-    
+
 }
