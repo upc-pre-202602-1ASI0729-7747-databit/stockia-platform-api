@@ -12,8 +12,8 @@ import java.util.Optional;
 public interface AlertRepository extends JpaRepository<AlertJpaEntity, Long> {
     List<AlertJpaEntity> findAllByRestaurantIdOrderByCreatedAtDescIdDesc(Long restaurantId);
 
-    Optional<AlertJpaEntity> findFirstByRestaurantIdAndInventoryItemIdAndTypeAndAcknowledgedFalseOrderByIdDesc(Long restaurantId,
-                                                                                                               Long inventoryItemId, AlertType type);
+    Optional<AlertJpaEntity> findFirstByRestaurantIdAndInventoryItemIdAndTypeAndAcknowledgedFalseOrderByIdDesc(
+            Long restaurantId, Long inventoryItemId, AlertType type);
 
     long countByRestaurantIdAndAcknowledgedFalse(Long restaurantId);
 }
