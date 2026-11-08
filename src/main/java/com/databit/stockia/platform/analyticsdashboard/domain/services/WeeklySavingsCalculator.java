@@ -22,9 +22,6 @@ import java.util.function.Function;
  * </ul>
  */
 public final class WeeklySavingsCalculator {
-    /**
-     * Same window as the "expiring soon" status of Stock Management.
-     */
     public static final int RESCUE_WINDOW_DAYS = 3;
     public static final int WEEK_DAYS = 7;
 
