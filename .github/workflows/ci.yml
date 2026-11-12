@@ -1,0 +1,96 @@
+name: CI
+
+on:
+  push:
+    branches: [main, develop, 'feature/**', 'release/**', 'hotfix/**']
+  pull_request:
+    branches: [main, develop]
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: Build and test (unit + integration)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Compile and run the tests
+        run: |
+          set -o pipefail
+          mvn -B -ntp verify 2>&1 | tee build.log
+      - name: Report build errors
+        if: failure()
+        run: |
+          errors=$(grep -E '^\[ERROR\]' build.log | grep -vE 'Re-run Maven|^\[ERROR\] *$|To see the full stack|Help 1|-> \[Help' | head -60 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+          echo "::error title=Maven build::${errors}"
+          for report in target/surefire-reports/*.txt; do
+            [ -f "$report" ] || continue
+            if grep -qE 'FAILURE|ERROR' "$report"; then
+              body=$(head -40 "$report" | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+              echo "::error title=Test report $(basename "$report")::${body}"
+            fi
+          done
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: test-reports
+          path: |
+            build.log
+            target/surefire-reports/
+          if-no-files-found: ignore
+
+  smoke:
+    name: Smoke test against MySQL
+    needs: build
+    runs-on: ubuntu-24.04
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: root
+          MYSQL_DATABASE: stockia_os
+        ports: ['3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -proot" --health-interval=5s --health-timeout=5s --health-retries=20
+    steps:
+      - uses: actions/checkout@v5
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+          cache: maven
+      - name: Package
+        run: mvn -B -ntp -DskipTests package
+      - name: Start the API (dev profile, MySQL)
+        env:
+          SPRING_PROFILES_ACTIVE: dev
+          DATABASE_URL: jdbc:mysql://127.0.0.1:3306/stockia_os?createDatabaseIfNotExist=true&allowPublicKeyRetrieval=true&useSSL=false&serverTimezone=UTC
+          DATABASE_USER: root
+          DATABASE_PASSWORD: root
+          STOCKIA_JWT_SECRET: ci-secret-0123456789-0123456789-0123456789
+        run: |
+          nohup java -jar target/stockia-platform.jar > api.log 2>&1 &
+          for attempt in $(seq 1 60); do
+            if curl -fs http://localhost:8181/api/v1/health > /dev/null; then echo "API is up"; exit 0; fi
+            sleep 3
+          done
+          tail -80 api.log
+          exit 1
+      - name: Run the smoke test
+        run: python3 tests/smoke/smoke_test.py http://localhost:8181/api/v1
+      - name: Report API log
+        if: failure()
+        run: |
+          body=$(grep -E 'ERROR|WARN|Exception|Caused by' api.log | head -40 | sed 's/%/%25/g' | awk '{printf "%s%%0A", $0}')
+          echo "::error title=API log::${body}"
+      - uses: actions/upload-artifact@v5
+        if: always()
+        with:
+          name: api-log
+          path: api.log
